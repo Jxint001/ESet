@@ -172,7 +172,7 @@ Set的`iterator`本身不支持修改值，实质与`const_iterator`无异。
     - 跳表
     - AVL树
     - B+树（内存层面）
-    - 无旋treap
+    - treap
     - 其它平衡树
     - ...
 
