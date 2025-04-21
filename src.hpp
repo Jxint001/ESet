@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <functional>
 #include <string>
 class exception {
@@ -19,10 +20,17 @@ class ESet {
         Node *son[2], *parent, *prev, *next;
         enum color {BLACK, RED};
         Key key;
+        size_t siz;
     };
     Node* root = nullptr;
     Node* first = nullptr;
     size_t count = 0;
+
+    void UpdSiz(Node* u) {
+        u->siz = 1;
+        if (u->son[0]) {u->siz += u->son[0]->siz; }
+        if (u->son[1]) {u->siz += u->son[1]->siz; }
+    }
 
     Node* subtree_min(const Node* u) {}
 
@@ -137,7 +145,38 @@ public:
     }
 
     // 返回[l,r]内元素的个数。若l>r，返回0。最高可接受复杂度 O(logn) 
-    size_t range(const Key& l, const Key& r) const;
+    size_t range(const Key& l, const Key& r) const {
+        if (l > r)  return 0;
+         //  <l 的数量为ret1， >r 的数量为ret2，之间的元素就是 count - ret1 - ret2
+        size_t ret1 = 0, ret2 = 0;
+        Node* cur = root;
+        while (cur != nullptr) {
+            if (l < cur->key) {
+                cur = cur->son[0];
+            } else if (cur->key < l) {
+                ret1 += 1;
+                if (cur->son[0]) {ret1 += cur->son[0]->siz; }
+                cur = cur->son[1];
+            } else {
+                if (cur->son[0]) {ret1 += cur->son[0]->siz; } 
+                break;
+            }
+        }
+        cur = root;
+        while (cur != nullptr) {
+            if (r < cur->key) {
+                ret2 += 1;
+                if (cur->son[1]) {ret2 += cur->son[1]->siz; }
+                cur = cur->son[0];
+            } else if (cur->key < r) {
+                cur = cur->son[1];
+            } else {
+                if (cur->son[1]) {ret2 += cur->son[1]->siz; }
+                break;
+            }
+        }
+        return count - ret1 - ret2;
+    }
 
      // 返回最小的 >= key 的元素的迭代器/end()， O(logn) 
     iterator lower_bound(const Key& key) const;
