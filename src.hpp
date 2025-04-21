@@ -19,7 +19,7 @@ class container_is_empty : public exception {};
 template <class Key, class Compare = std::less<Key>>
 class ESet {
     struct Node{
-        Node *left, *right, *parent;
+        Node *left, *right, *parent, *prev, *next;
         enum color {BLACK, RED};
         Key key;
     };
@@ -34,7 +34,9 @@ public:
     size_t size() const noexcept {return count; }
 
     // 迭代器操作要O(1)
-    class iterator;
+    class iterator {
+
+    };
 
     template< class... Args >
     std::pair<iterator, bool> emplace( Args&&... args );
