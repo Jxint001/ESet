@@ -43,7 +43,7 @@ public:
     ESet();
     ~ESet() {clear(); }
 
-    // 深拷贝
+    // 深拷贝。最高可接受复杂度 O(nlogn)
     ESet(const ESet& other) {
         for (auto it = other.begin(); it != other.end(); ++it) {
             emplace(*it);
@@ -59,7 +59,7 @@ public:
         return *this;
     }
 
-    // 移动。移动之后不应该有新增的空间，other应当被销毁。最高可接受复杂度 O(nlogn) 
+    // 移动。移动之后不应该有新增的空间，other应当被销毁。O(1)
     ESet(ESet&& other) : root(other.root), first(other.first), count(other.count) {
         other.root = nullptr;  other.first = nullptr;  other.count = 0;
     }
@@ -75,13 +75,13 @@ public:
     // 返回当前ESet总元素个数， O(1)
     size_t size() const noexcept {return count; }
 
-    // 迭代器操作要O(1)
+    // 迭代器操作O(1)
     class iterator {
         const Node* it;
         const ESet* container;
     public:
         iterator(Node* oth, const ESet* cont) : it(oth), container(cont) {}
-        //*it
+        // *it
         const Key& operator*() const {
             if (it == nullptr)  throw invalid_iterator();
             return it->key;
@@ -122,7 +122,19 @@ public:
     iterator begin() const noexcept {return iterator(first, this); }
     iterator end() const noexcept {return iterator(nullptr, this); }
 
-    iterator find(const Key& key) const;
+    iterator find(const Key& key) const {
+        Node *cur = root;
+        while (cur != nullptr) {
+            if (key < cur->key) {
+                cur = cur->son[0];
+            } else if (cur->key < key) {
+                cur = cur->son[1];
+            } else {
+                return iterator(cur, this);
+            }
+        }
+        return end();
+    }
 
     // 返回[l,r]内元素的个数。若l>r，返回0。最高可接受复杂度 O(logn) 
     size_t range(const Key& l, const Key& r) const;
