@@ -18,7 +18,6 @@ template <class Key, class Compare = std::less<Key>>
 class ESet {
     struct Node{
         Node *son[2], *parent, *prev, *next;
-        
         Color color;
         Key key;
         size_t siz;
@@ -30,13 +29,9 @@ class ESet {
     size_t count = 0;
 
     void UpdSiz(Node* u) {
-        Node *cur = u;
-        while (cur != nullptr) {
-            cur->siz = 1;
-            if (cur->son[0]) {cur->siz += cur->son[0]->siz; }
-            if (cur->son[1]) {cur->siz += cur->son[1]->siz; }
-            cur = cur->parent;
-        }
+        u->siz = 1;
+        if (u->son[0]) {u->siz += u->son[0]->siz; }
+        if (u->son[1]) {u->siz += u->son[1]->siz; }
     }
 
     void clear() {
@@ -50,10 +45,19 @@ class ESet {
         count = 0;
     }
 
-    // 以u为旋转中心的旋转，flg为0是左旋，否则右旋
+    // 以u为旋转点的旋转，flg为0是左旋，否则右旋
     // 注意旋转操作不影响prev和next，不影响color，影响son[2],parent和siz
     void Rotate(Node* u, bool flg) {
-        
+        Node* k = u->son[flg ^ 1];
+        Node* move = k->son[flg];
+        u->son[flg ^ 1] = move;
+        if (move != nullptr)  move->parent = u;
+        k->parent = u->parent;
+        if (u->parent != nullptr)  u->parent->son[u == u->parent->son[1]] = k;
+        else root = k;
+        k->son[flg] = u;
+        u->parent = k;
+        UpdSiz(u);  UpdSiz(k);
     }
 
 public:    
@@ -225,7 +229,7 @@ public:
             ++count;
             return {begin(), 1};
         }
-        // 获取插入的位置(pos是插入节点的父节点)
+        // 获取插入的位置(在UpdSiz之前pos是插入节点的父节点)
         Node* pos = root;
         while (true) {
             if (key < pos->key) {
@@ -239,7 +243,10 @@ public:
             }
         }
         ++count;
-        Node *new_node = new Node(key);  new_node->color = RED;  new_node->siz = 1;
+        Node *new_node = new Node(key);
+        new_node->color = RED;
+        new_node->siz = 1;
+        new_node->parent = pos;
         // 对双红的处理不影响双向链表（中序遍历），可以在前面就处理好prev和next
         if (key < pos->key) {
             pos->son[0] = new_node;
@@ -257,8 +264,12 @@ public:
             pos->next = new_node;
             if (nxt != nullptr) {nxt->prev = new_node; }
         }
-        UpdSiz(pos);
-        if (pos->color == BLACK)  return {iterator(new_node), 1};      
+        while (pos != nullptr) {
+            UpdSiz(pos);
+            pos = pos->parent;
+        }
+        
+        if (new_node->parent->color == BLACK)  return {iterator(new_node), 1};      
 
         // 处理双红的情况
         // 获取叔叔节点，pos->parent必然存在，因为pos是红的，意味着pos不是根
@@ -267,7 +278,7 @@ public:
             Node* father = cur->parent;
             Node* grand = cur->parent->parent;
             Node *uncle = grand->son[father != grand->son[1]];
-            if (uncle == nullptr || uncle->color = BLACK) {
+            if (uncle == nullptr || uncle->color == BLACK) {
                 if (father == grand->son[0]) {  // L
                     if (cur == father->son[0]) {  // LL
                         Rotate(grand, 1);
