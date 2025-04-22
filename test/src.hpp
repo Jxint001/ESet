@@ -18,6 +18,7 @@ class ESet {
     };
     Node *root = nullptr;
     Node *first = nullptr;
+    Node *tail = nullptr;
     size_t count = 0;
     Compare comp;
     std::vector<Node*> garbage;
@@ -29,8 +30,6 @@ class ESet {
     }
 
     void clear() {
-        //clean_garbage();
-       // std::cout << "in clear" << std::endl;
         Node *cur = first, *nxt;
         int t = 0;
         while (cur != nullptr) {
@@ -39,7 +38,7 @@ class ESet {
             cur = nxt;
         }
         //std::cout << "ok" << std::endl;
-        root = nullptr;  first = nullptr;
+        root = nullptr;  first = nullptr;  tail = nullptr;
         count = 0;
     }
 
@@ -61,10 +60,10 @@ class ESet {
     void Del_in_list(Node *u) {
         Node *nxt = u->next, *pre = u->prev;
         if (pre != nullptr)  {
-            //std::cout << "prev is not null" << std::endl; 
             pre->next = nxt;}
         if (nxt != nullptr)  nxt->prev = pre;
         if (u == first)  first = nxt;
+        if (u == tail)  tail = pre;
     }
     void Del_in_tree(Node *u) {
         if (u->parent != nullptr) {
@@ -99,10 +98,13 @@ class ESet {
         // y == z->next && z == y->prev
         Node* zp = z->prev;
         Node* yn = y->next;
-        if (zp) zp->next = y; else first = y;
+        if (zp) zp->next = y;  else first = y;
         if (yn) yn->prev = z;
         y->prev = zp;  y->next = z;
         z->prev = y;   z->next = yn;
+
+        if (z == tail)  tail = y;
+        else if (y == tail)  tail = z;
 
         Node* pz = z->parent;
         Node* py = y->parent;
@@ -159,14 +161,14 @@ public:
     }
 
     // 移动。移动之后不应该有新增的空间，other应当被销毁。O(1)
-    ESet(ESet&& other) : root(other.root), first(other.first), count(other.count), comp(other.comp) {
+    ESet(ESet&& other) : root(other.root), first(other.first), tail(other.tail), count(other.count), comp(other.comp) {
         other.root = nullptr;  other.first = nullptr;  other.count = 0;
     }
     ESet& operator=(ESet&& other) noexcept {
         if (this != &other) {
             clear();
             comp = other.comp;
-            root = other.root;  first = other.first;  count = other.count;
+            root = other.root;  first = other.first;  count = other.count;  tail = other.tail;
             other.root = nullptr;  other.first = nullptr;  other.count = 0;
         }
         return *this;
@@ -207,11 +209,7 @@ public:
             iterator tmp(*this);
             if (it != nullptr) it = it->prev;
             else {
-                Node *cur = container->root;
-                while (cur != nullptr && cur->son[1] != nullptr) {
-                    cur = cur->son[1];
-                }
-                it = cur;
+                it = container->tail;
             }
             return tmp;
         }
@@ -222,11 +220,7 @@ public:
             //hi();
             if (it != nullptr) it = it->prev;
             else {
-                Node *cur = container->root;
-                while (cur != nullptr && cur->son[1] != nullptr) {
-                    cur = cur->son[1];
-                }
-                it = cur;
+                it = container->tail;
             }
             return *this;
         }
@@ -326,6 +320,7 @@ public:
             //all_nodes.insert(root);
             root->color = BLACK;  root->siz = 1;
             first = root;
+            tail = root;
             ++count;
             return {begin(), 1};
         }
@@ -364,6 +359,7 @@ public:
             new_node->next = nxt;
             pos->next = new_node;
             if (nxt != nullptr) {nxt->prev = new_node; }
+            else {tail = new_node; }
         }
         while (pos != nullptr) {
             UpdSiz(pos);
@@ -412,8 +408,6 @@ public:
     }
 
     // 有key返回1，无则返回0
-
-
     size_t erase(const Key& key) {
         // 找到要删除的节点
         Node *z = root;
