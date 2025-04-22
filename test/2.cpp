@@ -1,7 +1,7 @@
 #include "src.hpp"
-#if defined (_UNORDERED_MAP_)  || (defined (_LIST_)) || (defined (_MAP_)) || (defined (_SET_)) || (defined (_UNORDERED_SET_))||(defined (_GLIBCXX_MAP)) || (defined (_GLIBCXX_UNORDERED_MAP))
-BOOM :)
-#endif
+// #if defined (_UNORDERED_MAP_)  || (defined (_LIST_)) || (defined (_MAP_)) || (defined (_SET_)) || (defined (_UNORDERED_SET_))||(defined (_GLIBCXX_MAP)) || (defined (_GLIBCXX_UNORDERED_MAP))
+// BOOM :)
+// #endif
 #include<iostream>
 
 int main() {
@@ -32,6 +32,7 @@ int main() {
             case 1:
                 scanf("%lld%lld", &a, &b);
                 if (valid && it_a==a && *it == b)valid = 0;
+                //std::cout << "in 1" << std::endl;
                 s[a].erase(b);
                 break;
             case 2:
@@ -42,7 +43,9 @@ int main() {
                 scanf("%lld%lld", &a, &b);
                 auto it2 = s[a].find(b);
                 if (it2 != s[a].end()) {
+                    //std::cout << "shit" << std::endl;
                     printf("true\n");
+                    //std::cout << std::endl;
                     it_a = a;
                     it = it2;
                     valid = 1;
@@ -53,7 +56,9 @@ int main() {
             }
             case 4:
                 scanf("%lld%lld%lld", &a, &b, &c);
+                //std::cout << "in range" << std::endl;
                 printf("%d\n", s[a].range(b, c));
+                //std::cout << "shit" << std::endl;
                 cnt++;
                 break;
             case 5:
