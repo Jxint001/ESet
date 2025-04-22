@@ -21,7 +21,20 @@ class ESet {
     Node *tail = nullptr;
     size_t count = 0;
     Compare comp;
-    std::vector<Node*> garbage;
+    std::vector<Node*> pool;
+
+    Node* NEW_NODE(const Key& key) {
+        if (!pool.empty()) {
+            Node *node = pool.back();  pool.pop_back();
+            *node = Node(key);
+            return node;
+        }
+        return new Node(key);
+    }
+
+    void RECYCLE(Node* node) {
+        pool.push_back(node);
+    }
 
     void UpdSiz(Node *u) {
         u->siz = 1;
@@ -34,7 +47,8 @@ class ESet {
         int t = 0;
         while (cur != nullptr) {
             nxt = cur->next;
-            delete cur;
+            //delete cur;
+            RECYCLE(cur);
             cur = nxt;
         }
         //std::cout << "ok" << std::endl;
@@ -84,7 +98,8 @@ class ESet {
         Del_in_list(u);
         // 再修改树结构
         Del_in_tree(u);
-        delete u;
+        //delete u;
+        RECYCLE(u);
     }
 
     void copy_subtree(Node* node) {
@@ -146,7 +161,11 @@ class ESet {
 
 public:    
     ESet() : comp(Compare()) {}
-    ~ESet() {clear();}//
+    ~ESet() {
+        clear();
+        for (Node *node : pool)  delete node;
+        pool.clear();
+    }
 
     // 深拷贝。最高可接受复杂度 O(nlogn)
     ESet(const ESet& other) : comp(other.comp), root(nullptr), first(nullptr), count(0) {
@@ -239,9 +258,10 @@ public:
     iterator find(const Key& key) const {
         Node *cur = root;
         while (cur != nullptr) {
-            if (comp(key, cur->key)) {
+            int cmp = comp(key, cur->key) ? -1 : (comp(cur->key, key) ? 1 : 0);
+            if (cmp == -1) {
                 cur = cur->son[0];
-            } else if (comp(cur->key, key)) {
+            } else if (cmp == 1) {
                 cur = cur->son[1];
             } else {
                 return iterator(cur, this);
@@ -257,9 +277,10 @@ public:
         size_t ret1 = 0, ret2 = 0;
         Node *cur = root;
         while (cur != nullptr) {
-            if (comp(l, cur->key)) {
+            int cmp = comp(l, cur->key) ? -1 : (comp(cur->key, l) ? 1 : 0);
+            if (cmp == -1) {
                 cur = cur->son[0];
-            } else if (comp(cur->key, l)) {
+            } else if (cmp == 1) {
                 ret1 += 1;
                 if (cur->son[0]) {ret1 += cur->son[0]->siz; }
                 cur = cur->son[1];
@@ -270,11 +291,12 @@ public:
         }
         cur = root;
         while (cur != nullptr) {
-            if (comp(r, cur->key)) {
+            int cmp = comp(r, cur->key) ? -1 : (comp(cur->key, r) ? 1 : 0);
+            if (cmp == -1) {
                 ret2 += 1;
                 if (cur->son[1]) {ret2 += cur->son[1]->siz; }
                 cur = cur->son[0];
-            } else if (comp(cur->key, r)) {
+            } else if (cmp == 1) {
                 cur = cur->son[1];
             } else {
                 if (cur->son[1]) {ret2 += cur->son[1]->siz; }
@@ -316,7 +338,8 @@ public:
     std::pair<iterator, bool> emplace( Args&&... args ) {
         Key key(std::forward<Args>(args)...);
         if (!count) {
-            root = new Node(key);
+            //root = new Node(key);
+            root = NEW_NODE(key);
             //all_nodes.insert(root);
             root->color = BLACK;  root->siz = 1;
             first = root;
@@ -327,10 +350,11 @@ public:
         // 获取插入的位置(在UpdSiz之前pos是插入节点的父节点)
         Node *pos = root;
         while (true) {
-            if (comp(key, pos->key)) {
+            int cmp = comp(key, pos->key) ? -1 : (comp(pos->key, key) ? 1 : 0);
+            if (cmp == -1) {
                 if (pos->son[0] == nullptr) break;
                 else  pos = pos->son[0];
-            } else if (comp(pos->key, key)) {
+            } else if (cmp == 1) {
                 if (pos->son[1] == nullptr) break;
                 else  pos = pos->son[1];
             } else {
@@ -338,7 +362,8 @@ public:
             }
         }
         ++count;
-        Node *new_node = new Node(key);
+        // *new_node = new Node(key);
+        Node *new_node = NEW_NODE(key);
         //all_nodes.insert(new_node);
         new_node->color = RED;
         new_node->siz = 1;
@@ -412,9 +437,10 @@ public:
         // 找到要删除的节点
         Node *z = root;
         while (z != nullptr) {
-            if (comp(key, z->key)) {
+            int cmp = comp(key, z->key) ? -1 : (comp(z->key, key) ? 1 : 0);
+            if (cmp == -1) {
                 z = z->son[0];
-            } else if (comp(z->key, key)) {
+            } else if (cmp == 1) {
                 z = z->son[1];
             } else {
                 break;
@@ -544,7 +570,8 @@ public:
         }
         Del_in_list(y);
         --count;
-        delete y;
+        //delete y;
+        RECYCLE(y);
         return 1;
     }
 };
