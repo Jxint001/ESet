@@ -1,3 +1,4 @@
+//#define DEBUG
 #include <algorithm>
 #include <cassert>
 #include <climits>
@@ -107,6 +108,7 @@ struct Node{
 };
 
 static inline NodePtr cloneNode(const NodePtr &src) {
+    assert(src.use_count() >= 1);
     // 1) 新建同类型节点，会在构造里自动 Pay(this) 分配 payload 内存
     NodePtr dst = std::make_shared<Node>(src->type);
     // 2) 拷贝元数据
@@ -177,31 +179,56 @@ void collectKeys(NodePtr u, vector<ll>& out) {
         switch (u->type) {
           case Node::NODE4: {
             auto *p = static_cast<load4*>(u->data.payload);
-            for (int i = 0; i < u->count; ++i)
-              collectKeys(p->child4[i], out);
+            for (int i = 0; i < u->count; ++i) {
+                if (!p->child4[i]) {
+                    std::cerr << "[collectKeys] NODE4 child4[" << i << "] is nullptr! parent count=" << (int)u->count << "\n";
+                    assert(false);
+                }
+                collectKeys(p->child4[i], out);
+            }
             break;
           }
           // 同理写 NODE16 / NODE48 / NODE256
           case Node::NODE16: {
             auto *p = static_cast<load16*>(u->data.payload);
-            for (int i = 0; i < u->count; ++i)
-              collectKeys(p->child16[i], out);
+            for (int i = 0; i < u->count; ++i) {
+                if (!p->child16[i]) {
+                    std::cerr << "[collectKeys] NODE4 child4[" << i << "] is nullptr! parent count=" << (int)u->count << "\n";
+                    assert(false);
+                }
+                collectKeys(p->child16[i], out);
+            }
             break;
           }
           case Node::NODE48: {
             auto *p = static_cast<load48*>(u->data.payload);
+            int cnt = 0;
             for (int b = 0; b < 256; ++b) {
                 int idx = p->childIndex[b];
                 if (idx != -1) {
+                    ++cnt;
                     collectKeys(p->child48[idx], out);
                 }
             }
+            if (cnt != u->count) {std::cerr << "in load48 miss: " << cnt << "should be " << u->count << "\n";}  assert(cnt == u->count);
             break;
           }
           case Node::NODE256: {
             auto *p = static_cast<load256*>(u->data.payload);
-            for (int b = 0; b < 256; ++b)
-              if (p->child256[b]) collectKeys(p->child256[b], out);
+            int cnt = 0;
+            for (int b = 0; b < 256; ++b) {
+                if (p->child256[b]) {
+                    ++cnt;
+                    collectKeys(p->child256[b], out);
+                }
+            }
+            if (cnt != u->count) {
+                std::cerr << "in load256 miss: cnt=" << cnt << " u->count=" << int(u->count) << " node=" << u.get() << std::endl;
+                for (int b = 0; b < 256; ++b) {
+                    if (p->child256[b]) std::cerr << "  child256[" << b << "] = " << p->child256[b].get() << std::endl;
+                }
+            }
+            assert(cnt == u->count);
             break;
           }
           default: break;
@@ -266,6 +293,40 @@ static inline NodePtr makeLeaf(ll value) {
     NodePtr leaf = std::make_shared<Node>(Node::LEAF);
     leaf->data.value = value;
     return leaf;
+}
+
+int count_nodes(NodePtr u) {
+    if (!u) return 0;
+    if (u->type == Node::LEAF) return 1;
+    int sum = 0;
+    switch (u->type) {
+        case Node::NODE4: {
+            auto *p = static_cast<load4*>(u->data.payload);
+            for (int i = 0; i < u->count; ++i)
+                sum += count_nodes(p->child4[i]);
+            break;
+        }
+        case Node::NODE16: {
+            auto *p = static_cast<load16*>(u->data.payload);
+            for (int i = 0; i < u->count; ++i)
+                sum += count_nodes(p->child16[i]);
+            break;
+        }
+        case Node::NODE48: {
+            auto *p = static_cast<load48*>(u->data.payload);
+            for (int i = 0; i < u->count; ++i)
+                sum += count_nodes(p->child48[i]);
+            break;
+        }
+        case Node::NODE256: {
+            auto *p = static_cast<load256*>(u->data.payload);
+            for (int i = 0; i < 256; ++i)
+                if (p->child256[i]) sum += count_nodes(p->child256[i]);
+            break;
+        }
+        default: break;
+    }
+    return sum;
 }
 
 static inline void recalc_size(NodePtr n) {
@@ -380,6 +441,14 @@ static inline int findChildIndex(NodePtr node, uint8_t ch) {
 // add a new branch (b -> child) to current node (node)
 // if count reaches the capacity (no place for insertion), return false
 static inline bool insertChild(NodePtr node, uint8_t b, NodePtr child) {
+    // if (node.use_count() != 1) {
+    // std::cerr << "insertChild use_count=" << node.use_count() 
+    //           << ", node addr=" << node.get()
+    //           << ", type=" << int(node->type) 
+    //           << ", count=" << int(node->count) << std::endl;
+    // // 可以加 __builtin_return_address(0) 等，或用 gdb 断点
+    // }
+    // assert(node.use_count() == 1);
     if (!child)  return false;  // do not //retain while using nullptr for occupation
     //retain(child);
     switch (node->type) {
@@ -435,51 +504,48 @@ static inline bool insertChild(NodePtr node, uint8_t b, NodePtr child) {
 
 // expand node
 static inline NodePtr expand(NodePtr node) {
-    NodePtr cloned = cloneNode(node);
+    NodePtr cloned = cloneNode(node); // 只clone当前节点
     Node::NodeType t;
     switch (node->type) {
-    case Node::NODE4:
-        t = Node::NODE16;
-        break;
-    case Node::NODE16:
-        t = Node::NODE48;
-        break;
-    case Node::NODE48:
-        t = Node::NODE256;
-        break;
-    default: break;
+    case Node::NODE4:  t = Node::NODE16; break;
+    case Node::NODE16: t = Node::NODE48; break;
+    case Node::NODE48: t = Node::NODE256; break;
+    default: return node;
     }
     NodePtr newnode = std::make_shared<Node>(t);
     switch (node->type) {
     case Node::NODE4: {
         auto *p = static_cast<load4*>(cloned->data.payload);
-        for (int i = 0; i < node->count; ++i)
-            insertChild(newnode, p->key4[i], p->child4[i]);
+        for (int i = 0; i < cloned->count; ++i)
+            insertChild(newnode, p->key4[i], cloneNode(p->child4[i]));
         break;
     }
     case Node::NODE16: {
         auto *p = static_cast<load16*>(cloned->data.payload);
-        for (int i = 0; i < node->count; ++i)
-            insertChild(newnode, p->key16[i], p->child16[i]);
+        for (int i = 0; i < cloned->count; ++i)
+            insertChild(newnode, p->key16[i], cloneNode(p->child16[i]));
         break;
     }
     case Node::NODE48: {
         auto *p = static_cast<load48*>(cloned->data.payload);
-        NodePtr newBig = std::make_shared<Node>(Node::NODE256);
         for (int byte = 0; byte < 256; ++byte) {
             int idx = p->childIndex[byte];
             if (idx >= 0) {
-                insertChild(newBig, byte, p->child48[idx]);
+                insertChild(newnode, byte, cloneNode(p->child48[idx]));
             }
         }
-        newnode = newBig;
         break;
     }
     default:  return node;
     }
-    //newnode->size = node->size;
     recalc_size(newnode);
     check_size(newnode);
+    if (t == Node::NODE256) {
+        auto *p = static_cast<load256*>(newnode->data.payload);
+        int cnt = 0;
+        for (int b = 0; b < 256; ++b) if (p->child256[b]) ++cnt;
+        assert(cnt == newnode->count);
+    }
     return newnode;
 }
 
@@ -652,7 +718,6 @@ static NodePtr eraseNode(NodePtr node, uint64_t key, ll value, int dep, bool& re
                         //break;
                     }
                 }
-
                 pc->child48[last] = nullptr;
                 pc->childIndex[b] = -1;
                 copy->count--;
@@ -1107,10 +1172,20 @@ public:
     ESet() : root(nullptr) {}
     ~ESet() {}
 
-    ESet(const ESet& other): root(other.root) {}//retain(root); }
+    ESet(const ESet& other) {
+        if (other.root != nullptr) {
+            root = cloneNode(other.root);
+        } else {
+            root = nullptr;
+        }
+    }
     ESet& operator=(const ESet& other) {
         if (&other != this) {
-            root = other.root;
+            if (other.root != nullptr) {
+                root = cloneNode(other.root);
+            } else {
+                root = nullptr;
+            }
         }
         return *this;
     }
@@ -1261,6 +1336,12 @@ void sanity_check(NodePtr root, const std::set<ll>& ref) {
     // 1) collectKeys
     std::vector<ll> got;
     collectKeys(root, got);
+
+    int a = got.size();  int b = count_nodes(root);  int c = ref.size();
+    if (!(a==b && b == c)) {
+        std::cerr << "a: " << a << "b: " << b << "c: " << c << "\n";
+        assert(false);
+    }
 
     // 2) ref 的 in-order
     std::vector<ll> exp(ref.begin(), ref.end());
@@ -1433,7 +1514,9 @@ int main() {
     int last_version = 0, it_version = -1;
     bool valid_it = false;
 
+    ll total_op = 0;
     while (scanf("%d", &op) == 1) {
+        ++total_op;
         fflush(stdout);
         switch (op) {
             case 0: { // emplace
@@ -1448,19 +1531,6 @@ int main() {
                 #ifdef DEBUG
                 sanity_check(es[a].root, ref[a]);
                 #endif
-                // {
-                //     std::vector<ll> got;
-                //     collectKeys(es[0].root, got);
-                //     std::cerr << ">>> ESet[" << a << "] has " << got.size() << " keys, std::set[0] has "
-                //             << ref[0].size() << " keys\n";
-                // // 只打印前后几条就够看，别都打印了
-                //     for (int i = std::max(0, (int)got.size()-5); i < (int)got.size(); ++i)
-                //         std::cerr << got[i] << " ";
-                //     std::cerr << "\n";
-                //     auto it = ref[0].end(); if (it!=ref[0].begin()) { --it;
-                //     std::cerr << " std::set last: " << *it << "\n";
-                //     }
-                // }
                 if (ins_es != ins_ref) {
                     std::cerr
                         << "!!! MISMATCH on emplace: version=" << a
@@ -1547,8 +1617,8 @@ int main() {
               << RANGE_OP_COUNT << "\n";
                     std::cerr << a << " " << b << " " << c << "\n";
                     sanity_check(es[a].root, ref[a]);
-                     
                 }
+                if (total_op >= 210000)  sanity_check(es[a].root, ref[a]);
                 // 同时可用 ref 计算做双重验证：
                 auto it_lo = ref[a].lower_bound(b);
                 auto it_hi = ref[a].upper_bound(c);
